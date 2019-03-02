@@ -13,15 +13,12 @@ public class Server {
         clientSocket = serverSocket.accept();
         out = new PrintWriter(clientSocket.getOutputStream(), true);
         in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
-        String greeting = in.readLine();
-        if ("hello server".equals(greeting)) {
-            out.println("hello client");
-        }
-        else {
-            out.println("unrecognised greeting");
-        }
     }
  
+    public String readMessage(){
+        String msg = in.readLine();
+        return msg;
+    }
     public void stop() throws Exception {
         in.close();
         out.close();
@@ -32,5 +29,8 @@ public class Server {
     public static void main(String[] args) throws Exception{
         Server server=new Server();
         server.start(6666);
+        while(1){
+            server.readMessage();
+        }
     }
 }
