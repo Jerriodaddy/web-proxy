@@ -15,12 +15,17 @@ public class Server {
         in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
     }
  
-    public String readMessage() throws Exception {
-        String msg = in.readLine();
-        // while (in.hasNextLine){
-        //  print
-        // }
-        return msg;
+    public ArrayList readMessage() throws Exception {
+        ArrayList<String> msg_array = new ArrayList<String>();
+          String msg;
+          while ((msg = (String)in.readLine()) != null) {
+              System.out.println(msg);
+              msg_array.add(msg);
+              
+              //if timer = 1 second stop connection 
+
+          }
+        return msg_array;
     }
 
     public void sendMessage(String msg) throws Exception{
@@ -35,13 +40,27 @@ public class Server {
         serverSocket.close();
     }
 
-    public static String parseMessage(String msg) throws IOException{
-        
-        System.out.println("\n * Response");
-        while ((msg = in.readLine()) != null) {
-            System.out.println(msg);
+        public static boolean parseMessage(ArrayList msg) throws IOException{   
+      System.out.println("\n * Response");
+      
+      for(int i = 0; i <= 10; i++)
+      {
+          if(msg.contains("GET"))
+              return true;
+      }
+       
+      /*while ((msg = (String)in.readLine()) != null) {
+            
+            String[] msgArr = msg.split(" ", 5); 
+              
+            for (String a : msgArr) 
+                System.out.println(a);    
         }
-        return msg;
+        //if(msg.contains("GET"))
+            
+     //   else
+      //    return false;*/
+      return false;
     }
   /*  public String composeMessage(String[] string){
 
@@ -74,19 +93,18 @@ public class Server {
 
     public static void main(String[] args) throws Exception{
         Server server=new Server();
-        server.start(80);
+        server.start(6666);
         boolean run = true;
-        while(run){
-            server.readMessage();
-            System.out.println("Connected"); //print connecgtion msg
-            String msg = server.readMessage();
-            String parsed_msg = parseMessage(msg);
-            System.out.println(parsed_msg);
-            if (parsed_msg.contains("GET")){
-                
+       // while(run){
+            System.out.println("Connected");
+            ArrayList msg = server.readMessage();
+           // String msg[] = server.readMessage();
+            boolean parsed_msg = parseMessage(msg);
+          //  if (parsed_msg){
+                System.out.println("Has GET");
                 //if isThisInCashe() is false
                 //System.out.println(“Object not found in the cache”);
-                //Server server2 = new Server(); Create a (New) serverSocket to send request to the original server
+                //Server server2 = new Server(); //Create a (New) serverSocket to send request to the original server
                 //composed_msg = composeMessage()
                 //sendMessage(composed_msg)
                 //printFormat()
@@ -103,10 +121,10 @@ public class Server {
                 //sendMessage(composed_msg)
                 //Print the response header from the prox to the client
                 
-            }
+          //  }
                 
             //else
-                //Create a (New) serverSocket to send request to the original server
+                //Server server2 = new Server(); //Create a (New) serverSocket to send request to the original server
                 //composed_msg = composeMessage()
                 //sendMessage(composed_msg)
                 //printFormate()
@@ -118,7 +136,7 @@ public class Server {
                 //Print the response header from the proxy to the client
                 //Close (New) serverSocket
             
-        }
+      //  }
         server.stop();
     }
     
