@@ -50,8 +50,8 @@ public class Server {
 
     }
 
-    public void writeCache(){
-
+    public void writeCache(Cache){
+        
     }
 
     public String readCache(){
