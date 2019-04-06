@@ -93,11 +93,11 @@ public class Server {
     }*/
     
 
-
+    public static void listening() throws Exception{
         Server server=new Server();
         server.start(6666);
         while(true){
-            System.out.println("WEB PROXY SERVER IS LISTENING’");    public static void listening() throws Exception{
+            System.out.println("WEB PROXY SERVER IS LISTENING’");
 
             ArrayList msg = server.readMessage();
             if (msg!=null) {
@@ -105,42 +105,42 @@ public class Server {
                     System.out.println(s);
                 }
             }
-            String msg[] = server.readMessage();
-            boolean parsed_msg = parseMessage(msg);
-            if (parsed_msg){
-                System.out.println("Has GET");
-                if isThisInCashe() is false
-                System.out.println(“Object not found in the cache”);
-                Server server2 = new Server(); //Create a (New) serverSocket to send request to the original server
-                composed_msg = composeMessage()
-                sendMessage(composed_msg)
-                printFormat()
-                read message
-                parse message to the New server
-                if response is 200 OK
-                    writeCache()
-                Close (New) serverSocket
-                (Old) sendMessage
-                print OK?
-            else
-                Print “Object found in the cache” message
-                composed_msg = composeMessage()
-                sendMessage(composed_msg)
-                Print the response header from the prox to the client
+            // String msg[] = server.readMessage();
+            // boolean parsed_msg = parseMessage(msg);
+            // if (parsed_msg){
+            //     System.out.println("Has GET");
+            //     if isThisInCashe() is false
+            //     System.out.println(“Object not found in the cache”);
+            //     Server server2 = new Server(); //Create a (New) serverSocket to send request to the original server
+            //     composed_msg = composeMessage()
+            //     sendMessage(composed_msg)
+            //     printFormat()
+            //     read message
+            //     parse message to the New server
+            //     if response is 200 OK
+            //         writeCache()
+            //     Close (New) serverSocket
+            //     (Old) sendMessage
+            //     print OK?
+            // else
+            //     Print “Object found in the cache” message
+            //     composed_msg = composeMessage()
+            //     sendMessage(composed_msg)
+            //     Print the response header from the prox to the client
                 
-            }else{
-                Server server2 = new Server(); //Create a (New) serverSocket to send request to the original server
-                composed_msg = composeMessage()
-                sendMessage(composed_msg)
-                printFormate()
-                read message
-                parse message to the New server
-                Print the response header from the (new) server
-                composed_msg = composeMessage()
-                sendMessage(composed_msg) to client
-                Print the response header from the proxy to the client
-                Close (New) serverSocket
-            }
+            // }else{
+            //     Server server2 = new Server(); //Create a (New) serverSocket to send request to the original server
+            //     composed_msg = composeMessage()
+            //     sendMessage(composed_msg)
+            //     printFormate()
+            //     read message
+            //     parse message to the New server
+            //     Print the response header from the (new) server
+            //     composed_msg = composeMessage()
+            //     sendMessage(composed_msg) to client
+            //     Print the response header from the proxy to the client
+            //     Close (New) serverSocket
+            // }
                 
 
 
@@ -153,7 +153,7 @@ public class Server {
         // server.sendMessage("Hello");
 
         }
-        server.stop();
+        // server.stop();
     }
     public static void main(String[] args) throws Exception {
         listening();
