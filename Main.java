@@ -4,9 +4,9 @@ import java.io.*;
 
 public class Main {
     
-    static int PORT = 6666; //local
-    static int HTTP_PORT_REMOTE = 80; //remote
-    static int MAX_MESSAGE_LEN = 8196;
+    static int PORT = 6666; //Local Port
+    static int HTTP_PORT_REMOTE = 80; //Remote Port
+    static int MAX_MESSAGE_LEN = 1024; //8196
     static String HTTP_RESP_OK = "200 OK";
     static String HTTP_RESP_NOT_FOUND = "404 Not Found";
 
@@ -28,10 +28,12 @@ public class Main {
     }
 
     public static String[] ParseResponseHeader(String resHeader){
+        //Can edit respond content in this function.
         String[] resHeader_split = resHeader.split("\r\n");
         String code = "";
         String respCode = "";
         String conType = "";
+        String length = "";
         for (String s:resHeader_split) {
             String[] s_split = s.split(" ");
             if(s_split[0].startsWith(("HTTP/"))){
@@ -41,12 +43,19 @@ public class Main {
                 if(s_split[1].equals("400"))
                     code = HTTP_RESP_NOT_FOUND;
             }
-            if(s_split[0].startsWith(("Content-Type"))){
+            if(s_split[0].startsWith(("Content-Type:"))){
                 conType = s_split[1];
                 respCode += "\r\n" + s;
             }
+            if(s_split[0].startsWith(("Content-Length:"))){
+                length = s_split[1];
+                // respCode += "\r\n" + s;
+            }
+            if(s_split[0].startsWith(("Content-Encoding"))) {//maybe not need
+                respCode += "\r\n" + s;
+            }
         }
-        return new String[]{code, respCode, conType};
+        return new String[]{code, respCode, length, conType};
     }
 
     public static String composeRequestMessageHeader(String host, String url, String header){
@@ -86,9 +95,9 @@ public class Main {
 
     //Sends request to original server and returns response as {header, body}
     public static String[] SendRequest(String method, String destAddress, String data){
-        Socket serverSocket = null;
-        PrintWriter out;
-        BufferedReader in;
+        // Socket serverSocket = null;
+        // PrintWriter out;
+        // BufferedReader in;
         String[] s = parseRemoteDestAddress(destAddress);//{hostname, url, filename}
         InetAddress remoteAdd = null;
         try{
@@ -101,10 +110,10 @@ public class Main {
         // String remoteIP = remoteAdd.getHostAddress();
         // System.out.println(remoteIP);
         try{
-            serverSocket = new Socket(remoteAdd, HTTP_PORT_REMOTE);//Connect to remote Server
-            out = new PrintWriter(serverSocket.getOutputStream(), true);
-            in = new BufferedReader(new InputStreamReader(serverSocket.getInputStream()));
-
+            Socket serverSocket = new Socket(remoteAdd, HTTP_PORT_REMOTE);//Connect to remote Server
+            PrintWriter out = new PrintWriter(serverSocket.getOutputStream(), true);
+            // in = new BufferedReader(new InputStreamReader(serverSocket.getInputStream()));
+            InputStream in = serverSocket.getInputStream(); //Must be bytes.
             String[] data_split = data.split("\r\n\r\n");
             String httpMsgHeader=composeRequestMessageHeader(s[0], s[1], data_split[0]);
             String reqMsg = httpMsgHeader;
@@ -117,19 +126,50 @@ public class Main {
                                 +"\nEND OF MESSAGE SENT TO ORIGINAL SERVER");
             //Send and resive Msg
             out.println(reqMsg);
-            char[] buf = new char[MAX_MESSAGE_LEN];
-            int len = in.read(buf); //May over flow?
-            String resMsg = new String(buf, 0, len);
-            String[] resMsg_split = resMsg.split("\r\n\r\n");
-            String resHeader = resMsg_split[0];
+
+            String resMsg="";
+            String resHeader = "";
             String resContent = "";
+            /*** Method 1 ***///Can't work
+            // char[] buf = new char[MAX_MESSAGE_LEN];
+            byte[] buf = new byte[MAX_MESSAGE_LEN];
+            int len; //May over flow?
+            while((len = in.read(buf)) != -1){
+                //Handle buffer overflow
+                System.out.println("*****The len ="+len);
+                resMsg += new String(buf, 0, len); //have not split
+
+                if (len<MAX_MESSAGE_LEN) {
+                    break;
+                }
+            }
+            // System.out.println(resMsg);
+            System.out.println("&&&&&The len ="+len);
+            String[] resMsg_split = resMsg.split("\r\n\r\n");
+            resHeader = resMsg_split[0];
+            for(int i=1; i<resMsg_split.length; i++){
+                resContent += resMsg_split[i];
+            }
+            
+            /*** Method 2 ***/
+            // String line;
+            // if((line = in.readLine()) != null){
+            //     //Handle buffer overflow
+            //     System.out.println("---"+line);
+            //     resMsg += line;
+            // }
+            // String[] resMsg_split = resMsg.split("\r\n\r\n");
+            // resHeader = resMsg_split[0];
+
+
+
             System.out.println("\nRESPONSE HEADER FROM ORIGINAL SERVER:\n"
                             + resHeader
                             + "\nEND OF HEADER\n");
             
-            if(resMsg_split.length>1)
-                resContent = resMsg_split[1];
-            String code = ParseResponseHeader(resHeader)[0];
+
+            String[] parsedHeader = ParseResponseHeader(resHeader); //return {code, respCode, length, conType}
+            String code = parsedHeader[0]; 
             if(code.equals(HTTP_RESP_NOT_FOUND)){
                 //return
             }else if (code.equals(HTTP_RESP_OK)) {
@@ -138,7 +178,8 @@ public class Main {
             }else{//POST
                 //return
             }
-            return new String[]{code, resContent};
+            return new String[]{parsedHeader[1], resContent};
+            // return new String[]{parsedHeader[1], resMsg};
         }
         catch(IOException e){
             System.out.println("Error: Remote Connecting Error.");
@@ -152,7 +193,7 @@ public class Main {
         //Create a new socket for connecting to destination server
         String header = request.split("\r\n\r\n")[0];
         // System.out.println("HHHH:\n"+header);
-        String[] headerList= ParseRequest(header); //{method,destAddress,httpVersion}
+        String[] headerList= ParseRequest(header); //return {method,destAddress,httpVersion}
         String[] result = null;
         String response = "";
         // Socket socket2 = new Socket("localhost", 80);
@@ -165,7 +206,7 @@ public class Main {
 
             // }else{}
                 System.out.println("\n[LOOK UP IN THE CACHE]: NOT FOUND, BUILD REQUEST TO SEND TO ORIGINAL SERVER");
-                result = SendRequest(headerList[0], headerList[1], request); //{method,destAddress,data} return {code, content}
+                result = SendRequest(headerList[0], headerList[1], request); //{method,destAddress,data} return {respCode, content}
                 response = result[0]+"\r\n\r\n"+result[1];
         }else{
             System.out.println("*** Not GET ***");
@@ -175,6 +216,11 @@ public class Main {
         System.out.println("\nRESPONSE HEADER FROM PROXY TO CLIENT:\n"
                             +result[0]
                             +"\nEND OF HEADER\n");
+        // System.out.println("\n%%%%%%%%%%%%%%%%%%%%%%%%%%\n");
+        // for (byte b : response.getBytes() ) {
+        //     System.out.print((char)b);
+        // }
+        // System.out.println("\n%%%%%%%%%%%%%%%%%%%%%%%%%%\n");
         out.println(response);
         try{
             clientSocket.close();
@@ -202,8 +248,11 @@ public class Main {
 
             // byte[] buf = new byte[MAX_MESSAGE_LEN];
             char[] buf = new char[MAX_MESSAGE_LEN]; //8196 is the default max size for GET requests in Apache
-            int len = in.read(buf); //The actural length readed & Write data into buf
-            // System.out.print((char)buf[0]);
+            int len; //May over flow? //The actural length readed & Write data into buf
+            if((len = in.read(buf)) != -1){
+                //Handle buffer overflow
+                System.out.println("*****The len ="+len);
+            }
             if(len!=-1){
                 String request = new String(buf, 0, len);
                 System.out.println("\nMESSAGE RECEIVED FROM CLIENT:\n"+request+"END OF MESSAGE RECEIVED FROM CLIENT");
