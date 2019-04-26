@@ -94,7 +94,7 @@ public class Main {
     }
 
     //Sends request to original server and returns response as {header, body}
-    public static String[] SendRequest(String method, String destAddress, String data){
+    public static byte[] SendRequest(String method, String destAddress, String data){
         // Socket serverSocket = null;
         // PrintWriter out;
         // BufferedReader in;
@@ -111,7 +111,9 @@ public class Main {
         // System.out.println(remoteIP);
         try{
             Socket serverSocket = new Socket(remoteAdd, HTTP_PORT_REMOTE);//Connect to remote Server
-            PrintWriter out = new PrintWriter(serverSocket.getOutputStream(), true);
+            PrintWriter out = new PrintWriter(serverSocket.getOutputStream(), true); // Bad code here, I should use 
+                                                                                     // OutputStream instead of PrintWriter.
+
             // in = new BufferedReader(new InputStreamReader(serverSocket.getInputStream()));
             InputStream in = serverSocket.getInputStream(); //Must be bytes.
             String[] data_split = data.split("\r\n\r\n");
@@ -123,11 +125,12 @@ public class Main {
             }
             System.out.println("\nREQUEST MESSAGE SENT TO ORIGINAL SERVER:\n"
                                 +reqMsg
-                                +"\nEND OF MESSAGE SENT TO ORIGINAL SERVER");
+                                +"\nEND OF MESSAGE SENT TO ORIGINAL SERVER\n");
             //Send and resive Msg
             out.println(reqMsg);
+            out.flush();
 
-            String resMsg="";
+            byte[] resMsgBytes = {};
             String resHeader = "";
             String resContent = "";
             /*** Method 1 ***///Can't work
@@ -136,16 +139,31 @@ public class Main {
             int len; //May over flow?
             while((len = in.read(buf)) != -1){
                 //Handle buffer overflow
-                System.out.println("*****The len ="+len);
-                resMsg += new String(buf, 0, len); //have not split
+                int resMsgBytes_len = resMsgBytes.length;
+                resMsgBytes = Arrays.copyOf(resMsgBytes, resMsgBytes.length+len); //extend length of resMsgBytes
+                System.arraycopy(buf, 0, resMsgBytes, resMsgBytes_len, len); //copy buf to resMsg
+                // resMsg += new String(buf, 0, len); //have not split
 
-                if (len<MAX_MESSAGE_LEN) {
-                    break;
-                }
+                /* 
+                We can not add the following code since len < MAX_MESSAGE_LEN only means 
+                we received one packet, but there may be multiple packet need to transmit. 
+                */
+                // System.out.println("*****The len ="+len);
+                // if (len<MAX_MESSAGE_LEN) {
+                //     break;
+                // }
             }
+
+            FileOutputStream fos = new FileOutputStream("record");
+            fos.write(resMsgBytes, 0, resMsgBytes.length);
+
+            String resMsg = new String(resMsgBytes, 0, resMsgBytes.length);
             // System.out.println(resMsg);
+            // for (byte b : resMsg ) {
+            //     System.out.print((char)b);
+            // }
             System.out.println("&&&&&The len ="+len);
-            String[] resMsg_split = resMsg.split("\r\n\r\n");
+            String[] resMsg_split = resMsg.toString().split("\r\n\r\n");
             resHeader = resMsg_split[0];
             for(int i=1; i<resMsg_split.length; i++){
                 resContent += resMsg_split[i];
@@ -178,8 +196,9 @@ public class Main {
             }else{//POST
                 //return
             }
-            return new String[]{parsedHeader[1], resContent};
+            // return new String[]{parsedHeader[1], resContent};
             // return new String[]{parsedHeader[1], resMsg};
+            return resMsgBytes;
         }
         catch(IOException e){
             System.out.println("Error: Remote Connecting Error.");
@@ -189,13 +208,14 @@ public class Main {
 
     }
 
-    public static void ProcessRequest(Socket clientSocket, PrintWriter out, BufferedReader in, String request){
+    public static void ProcessRequest(Socket clientSocket, OutputStream out, BufferedReader in, String request) throws Exception{
         //Create a new socket for connecting to destination server
         String header = request.split("\r\n\r\n")[0];
         // System.out.println("HHHH:\n"+header);
         String[] headerList= ParseRequest(header); //return {method,destAddress,httpVersion}
         String[] result = null;
         String response = "";
+        byte[] responseBytes=null;
         // Socket socket2 = new Socket("localhost", 80);
         // OutputStream outgoingOS = socket2.getOutputStream();
         // outgoingOS.write(data, 0, len);
@@ -206,22 +226,38 @@ public class Main {
 
             // }else{}
                 System.out.println("\n[LOOK UP IN THE CACHE]: NOT FOUND, BUILD REQUEST TO SEND TO ORIGINAL SERVER");
-                result = SendRequest(headerList[0], headerList[1], request); //{method,destAddress,data} return {respCode, content}
-                response = result[0]+"\r\n\r\n"+result[1];
+                // result = SendRequest(headerList[0], headerList[1], request); //{method,destAddress,data} return {respCode, content}
+                responseBytes = SendRequest(headerList[0], headerList[1], request);
+                // response = result[0]+"\r\n\r\n"+result[1];
         }else{
             System.out.println("*** Not GET ***");
+            return;
             //TODO
             // SendRequest(headerList[0], headerList[1], request);
         }
-        System.out.println("\nRESPONSE HEADER FROM PROXY TO CLIENT:\n"
-                            +result[0]
-                            +"\nEND OF HEADER\n");
+        // System.out.println("\nRESPONSE HEADER FROM PROXY TO CLIENT:\n"
+        //                     +result[0]
+        //                     +"\nEND OF HEADER\n");
+
         // System.out.println("\n%%%%%%%%%%%%%%%%%%%%%%%%%%\n");
         // for (byte b : response.getBytes() ) {
         //     System.out.print((char)b);
         // }
         // System.out.println("\n%%%%%%%%%%%%%%%%%%%%%%%%%%\n");
-        out.println(response);
+        // out.println(response);
+    
+
+        // char[] responseChars = new char[responseBytes.length];
+        // int count = 0;
+        // for (byte b:responseBytes ) {
+        //     System.out.print((char)b);
+        //     count++;
+        // }
+        out.write(responseBytes);
+        // System.out.println("responseBytes.length="+responseBytes.length+" count="+count);
+        // out.println(new String(responseBytes, 0 ,responseBytes.length)); // Can not sent byte[].
+        // out.flush();
+
         try{
             clientSocket.close();
         }catch(IOException e){
@@ -240,7 +276,8 @@ public class Main {
         System.out.println("WEB PROXY SERVER IS LISTENING");
         while(true){
             Socket clientSocket = serverSocket.accept();
-            PrintWriter out = new PrintWriter(clientSocket.getOutputStream(), true);
+            // PrintWriter out = new PrintWriter(clientSocket.getOutputStream(), true);
+            OutputStream out = clientSocket.getOutputStream();
             BufferedReader in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
             // InputStream in = clientSocket.getInputStream();
             System.out.println("==========================================");
