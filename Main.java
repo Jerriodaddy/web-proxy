@@ -1,3 +1,8 @@
+/*
+[Wait to Do List]
+- Cache
+- Receive msg from client should also using byte stream.
+*/
 import java.net.*;
 import java.util.*;
 import java.io.*;
@@ -11,6 +16,21 @@ public class Main {
     static String HTTP_RESP_NOT_FOUND = "404 Not Found";
 
     // http://assets.climatecentral.org/images/uploads/news/Earth.jpg
+
+    private static byte[] byteMergerAll(byte[]... values) {
+        int length_byte = 0;
+        for (int i = 0; i < values.length; i++) {
+            length_byte += values[i].length;
+        }
+        byte[] all_byte = new byte[length_byte];
+        int countLength = 0;
+        for (int i = 0; i < values.length; i++) {
+            byte[] b = values[i];
+            System.arraycopy(b, 0, all_byte, countLength, b.length);
+            countLength += b.length;
+        }
+        return all_byte;
+    }
 
     public static String[] parseRemoteDestAddress(String destAddress){
         String[] destAddress_split = destAddress.split("//|/");
@@ -40,7 +60,7 @@ public class Main {
                 respCode = s;
                 if(s_split[1].equals("200"))
                     code = HTTP_RESP_OK;
-                if(s_split[1].equals("400"))
+                if(s_split[1].equals("404"))
                     code = HTTP_RESP_NOT_FOUND;
             }
             if(s_split[0].startsWith(("Content-Type:"))){
@@ -93,19 +113,27 @@ public class Main {
         return s;
     }
 
+    // public static File OpenCacheFile(String filename){
+    //     if (filename.length > 40) {
+    //         filename = 
+    //     }
+    // }
+
+
     //Sends request to original server and returns response as {header, body}
     public static byte[] SendRequest(String method, String destAddress, String data){
-        // Socket serverSocket = null;
-        // PrintWriter out;
-        // BufferedReader in;
+
         String[] s = parseRemoteDestAddress(destAddress);//{hostname, url, filename}
-        InetAddress remoteAdd = null;
+        String hostname = s[0];
+        String url = s[1];
+        String filename = s[2];
+        InetAddress remoteAdd = null; 
         try{
-            remoteAdd = InetAddress.getByName(s[0]);
+            remoteAdd = InetAddress.getByName(hostname); //get IP address.
         }catch(UnknownHostException e){
             e.printStackTrace();
-            return null;
-            // return ("HTTP/1.1 400 Bad Request", "From Web Proxy:400 Bad Request");
+            String error = "HTTP/1.1 400 Bad Request From Web Proxy:400 Bad Request";
+            return error.getBytes();
         }
         // String remoteIP = remoteAdd.getHostAddress();
         // System.out.println(remoteIP);
@@ -113,13 +141,12 @@ public class Main {
             Socket serverSocket = new Socket(remoteAdd, HTTP_PORT_REMOTE);//Connect to remote Server
             PrintWriter out = new PrintWriter(serverSocket.getOutputStream(), true); // Bad code here, I should use 
                                                                                      // OutputStream instead of PrintWriter.
-
             // in = new BufferedReader(new InputStreamReader(serverSocket.getInputStream()));
             InputStream in = serverSocket.getInputStream(); //Must be bytes.
-            String[] data_split = data.split("\r\n\r\n");
-            String httpMsgHeader=composeRequestMessageHeader(s[0], s[1], data_split[0]);
+            String[] data_split = data.split("\r\n\r\n"); //Header
+            String httpMsgHeader=composeRequestMessageHeader(hostname, url, data_split[0]); //new Header
             String reqMsg = httpMsgHeader;
-            if (data_split.length >1) {
+            if (data_split.length >1) { //sent content
                 System.out.println("data_split="+data_split);
                 reqMsg= httpMsgHeader + data_split[1];
             }
@@ -130,10 +157,8 @@ public class Main {
             out.println(reqMsg);
             out.flush();
 
-            byte[] resMsgBytes = {};
-            String resHeader = "";
-            String resContent = "";
-            /*** Method 1 ***///Can't work
+            byte[] resMsgBytes = {}; // Increase dynamically
+            /*** Method 1 ***/
             // char[] buf = new char[MAX_MESSAGE_LEN];
             byte[] buf = new byte[MAX_MESSAGE_LEN];
             int len; //May over flow?
@@ -141,8 +166,7 @@ public class Main {
                 //Handle buffer overflow
                 int resMsgBytes_len = resMsgBytes.length;
                 resMsgBytes = Arrays.copyOf(resMsgBytes, resMsgBytes.length+len); //extend length of resMsgBytes
-                System.arraycopy(buf, 0, resMsgBytes, resMsgBytes_len, len); //copy buf to resMsg
-                // resMsg += new String(buf, 0, len); //have not split
+                System.arraycopy(buf, 0, resMsgBytes, resMsgBytes_len, len); //copy buf to resMsgBytes
 
                 /* 
                 We can not add the following code since len < MAX_MESSAGE_LEN only means 
@@ -154,22 +178,30 @@ public class Main {
                 // }
             }
 
-            FileOutputStream fos = new FileOutputStream("record");
-            fos.write(resMsgBytes, 0, resMsgBytes.length);
+            // FileOutputStream fos = new FileOutputStream("record.jpg");
+            // fos.write(resMsgBytes, 0, resMsgBytes.length);
 
-            String resMsg = new String(resMsgBytes, 0, resMsgBytes.length);
+            // String resMsg = Base64.getEncoder().encodeToString(resMsgBytes); //Not the String we want
+            String resMsg = new String(resMsgBytes);
             // System.out.println(resMsg);
-            // for (byte b : resMsg ) {
-            //     System.out.print((char)b);
-            // }
-            System.out.println("&&&&&The len ="+len);
+            // System.out.println("&&&&&The len ="+len);
             String[] resMsg_split = resMsg.toString().split("\r\n\r\n");
-            resHeader = resMsg_split[0];
-            for(int i=1; i<resMsg_split.length; i++){
-                resContent += resMsg_split[i];
-            }
+            String resHeader = resMsg_split[0];
+            /* 
+            String resContent = resMsg_split[1]; 
+            byte[] resContentBytes = Base64.getDecoder().decode(resContent); //image encode using base64.
+
+            PS: Can not conver the image to String and decode back to binary 
+            stream using base64 in this way. The reason may be New String(byte[]) 
+            uses different encode method so that it makes the string been invalid 
+            Base64 scheme.
+            */
+
+            byte[] resHeaderBytes = resMsg_split[0].getBytes();
+            /* Subtract the head length from the original message.*/
+            byte[] resContentBytes = Arrays.copyOfRange(resMsgBytes, resHeaderBytes.length, resMsgBytes.length);
             
-            /*** Method 2 ***/
+            /*** Method 2 ***///Wrong
             // String line;
             // if((line = in.readLine()) != null){
             //     //Handle buffer overflow
@@ -179,28 +211,39 @@ public class Main {
             // String[] resMsg_split = resMsg.split("\r\n\r\n");
             // resHeader = resMsg_split[0];
 
-
-
             System.out.println("\nRESPONSE HEADER FROM ORIGINAL SERVER:\n"
                             + resHeader
                             + "\nEND OF HEADER\n");
             
-
             String[] parsedHeader = ParseResponseHeader(resHeader); //return {code, respCode, length, conType}
             String code = parsedHeader[0]; 
+            String respCode = parsedHeader[1];
+
+            // System.out.println(code+" ***"+code.equals(HTTP_RESP_NOT_FOUND));
             if(code.equals(HTTP_RESP_NOT_FOUND)){
+                String resContent = "From Web Proxy Server: 404 Not Found";
+                resContentBytes = resContent.getBytes();
                 //return
             }else if (code.equals(HTTP_RESP_OK)) {
-                // OpenCacheFile(s[2]); //Write into cache. s[2] is filename.
-                // return
+                if (filename.length>0) {
+                    File cacheFile = OpenCacheFile(filename); //Write into cache.
+                }
+                
             }else{//POST
                 //return
             }
-            // return new String[]{parsedHeader[1], resContent};
-            // return new String[]{parsedHeader[1], resMsg};
-            return resMsgBytes;
+
+            System.out.println("\nRESPONSE HEADER FROM PROXY TO CLIENT:\n"
+                            + respCode
+                            + "\nEND OF HEADER\n");
+
+            byte[] respCodeBytes = respCode.getBytes(); //respCode
+            byte[] mergeBytes = byteMergerAll(respCodeBytes, resContentBytes);
+
+            serverSocket.close();
+            return mergeBytes;
         }
-        catch(IOException e){
+        catch(Exception e){
             System.out.println("Error: Remote Connecting Error.");
             e.printStackTrace();
             return null;
@@ -208,58 +251,41 @@ public class Main {
 
     }
 
-    public static void ProcessRequest(Socket clientSocket, OutputStream out, BufferedReader in, String request) throws Exception{
-        //Create a new socket for connecting to destination server
-        String header = request.split("\r\n\r\n")[0];
-        // System.out.println("HHHH:\n"+header);
-        String[] headerList= ParseRequest(header); //return {method,destAddress,httpVersion}
-        String[] result = null;
-        String response = "";
-        byte[] responseBytes=null;
-        // Socket socket2 = new Socket("localhost", 80);
-        // OutputStream outgoingOS = socket2.getOutputStream();
-        // outgoingOS.write(data, 0, len);
-        if (headerList[0].equals("GET")) {
-            //Create a new socket for connecting to destination server
-            //is in cache?
-            // if(isInChash(destAddress)){
-
-            // }else{}
-                System.out.println("\n[LOOK UP IN THE CACHE]: NOT FOUND, BUILD REQUEST TO SEND TO ORIGINAL SERVER");
-                // result = SendRequest(headerList[0], headerList[1], request); //{method,destAddress,data} return {respCode, content}
-                responseBytes = SendRequest(headerList[0], headerList[1], request);
-                // response = result[0]+"\r\n\r\n"+result[1];
-        }else{
-            System.out.println("*** Not GET ***");
-            return;
-            //TODO
-            // SendRequest(headerList[0], headerList[1], request);
-        }
-        // System.out.println("\nRESPONSE HEADER FROM PROXY TO CLIENT:\n"
-        //                     +result[0]
-        //                     +"\nEND OF HEADER\n");
-
-        // System.out.println("\n%%%%%%%%%%%%%%%%%%%%%%%%%%\n");
-        // for (byte b : response.getBytes() ) {
-        //     System.out.print((char)b);
-        // }
-        // System.out.println("\n%%%%%%%%%%%%%%%%%%%%%%%%%%\n");
-        // out.println(response);
-    
-
-        // char[] responseChars = new char[responseBytes.length];
-        // int count = 0;
-        // for (byte b:responseBytes ) {
-        //     System.out.print((char)b);
-        //     count++;
-        // }
-        out.write(responseBytes);
-        // System.out.println("responseBytes.length="+responseBytes.length+" count="+count);
-        // out.println(new String(responseBytes, 0 ,responseBytes.length)); // Can not sent byte[].
-        // out.flush();
-
+    /* Should using thread */
+    public static void ProcessRequest(Socket clientSocket, OutputStream out, BufferedReader in, String request){
         try{
+            //Create a new socket for connecting to destination server
+            String header = request.split("\r\n\r\n")[0];
+            // System.out.println("HHHH:\n"+header);
+            String[] headerList= ParseRequest(header); //return {method,destAddress,httpVersion}
+            String[] result = null;
+            String response = "";
+            byte[] responseBytes=null;
+            // Socket socket2 = new Socket("localhost", 80);
+            // OutputStream outgoingOS = socket2.getOutputStream();
+            // outgoingOS.write(data, 0, len);
+            if (headerList[0].equals("GET")) {
+                //Create a new socket for connecting to destination server
+                //is in cache?
+                // if(isInChash(destAddress)){
+
+                // }else{}
+                    System.out.println("\n[LOOK UP IN THE CACHE]: NOT FOUND, BUILD REQUEST TO SEND TO ORIGINAL SERVER");
+                    // result = SendRequest(headerList[0], headerList[1], request); //{method,destAddress,data} return byte[]
+                    responseBytes = SendRequest(headerList[0], headerList[1], request);
+                    if(responseBytes == null)
+                        return;
+            }else{
+                System.out.println("*** Not GET ***");
+                return;
+                //TODO
+                // SendRequest(headerList[0], headerList[1], request);
+            }
+
+            out.write(responseBytes);
+            out.flush();
             clientSocket.close();
+
         }catch(IOException e){
             e.printStackTrace();
         }
