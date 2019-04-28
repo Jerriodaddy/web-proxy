@@ -3,6 +3,8 @@
 - Cache
 - Receive msg from client should also using byte stream.
 */
+
+// Example: http://assets.climatecentral.org/images/uploads/news/Earth.jpg
 import java.net.*;
 import java.util.*;
 import java.io.*;
@@ -14,8 +16,22 @@ public class Main {
     static int MAX_MESSAGE_LEN = 1024; //8196
     static String HTTP_RESP_OK = "200 OK";
     static String HTTP_RESP_NOT_FOUND = "404 Not Found";
+    static String PATH = "mycache";
+    static Map<String,Cache> cacheMap = new HashMap<String,Cache>();
+    
+    static private class Cache{
+        // String address;
+        String contentType;
+        String path;
+        String encoding;
 
-    // http://assets.climatecentral.org/images/uploads/news/Earth.jpg
+        public Cache(String type, String path, String encoding){
+            // this.address = add;
+            this.contentType = type;
+            this.path = path;
+            this.encoding = encoding;
+        }
+    }
 
     private static byte[] byteMergerAll(byte[]... values) {
         int length_byte = 0;
@@ -52,8 +68,10 @@ public class Main {
         String[] resHeader_split = resHeader.split("\r\n");
         String code = "";
         String respCode = "";
-        String conType = "";
         String length = "";
+        String conType = "";
+        String noCache = "false"; //may don't require cache. Add in this logic in the future.
+        String encoding = "";
         for (String s:resHeader_split) {
             String[] s_split = s.split(" ");
             if(s_split[0].startsWith(("HTTP/"))){
@@ -72,10 +90,11 @@ public class Main {
                 // respCode += "\r\n" + s;
             }
             if(s_split[0].startsWith(("Content-Encoding"))) {//maybe not need
+                encoding = s_split[1];
                 respCode += "\r\n" + s;
             }
         }
-        return new String[]{code, respCode, length, conType};
+        return new String[]{code, respCode, length, conType, encoding};
     }
 
     public static String composeRequestMessageHeader(String host, String url, String header){
@@ -113,12 +132,58 @@ public class Main {
         return s;
     }
 
-    // public static File OpenCacheFile(String filename){
-    //     if (filename.length > 40) {
-    //         filename = 
-    //     }
-    // }
+    public static File OpenCacheFile(String filename){ //Should consider the same name issue
+        File dir = new File(PATH);
+        if (!dir.exists()) {
+            dir.mkdir();
+        }
+        String pathName = PATH+"/"+filename;
+        File file = new File(pathName);
+        if(file.isFile()){
+            //already exist, delete it
+            file.delete();
+        }
+        return file;
+    }
 
+    public static Cache FindInChash(String address){
+        return cacheMap.get(address);
+    }
+
+    public static byte[] ComposeFromCache(Cache cache){
+        System.out.println("\n[LOOK UP THE CACHE]: FOUND IN THE CACHE: FILE = "+cache.path);
+        try{
+            byte[] response = {};
+            File file = new File(cache.path);
+            if(!file.isFile())
+                return null;
+            else{
+                FileInputStream fis = new FileInputStream(file);
+                byte[] buf = new byte[MAX_MESSAGE_LEN];
+                int len;
+                while((len = fis.read(buf)) != -1){
+                    response = byteMergerAll(response, buf);
+                }
+                //response is the content now.
+                fis.close();
+                String header = "HTTP/1.1 200 OK\r\n"
+                            +"Content-Length: " + response.length + "\r\n"
+                            +"Content-Type: " + cache.contentType + "\r\n"
+                            +"Content-Encoding: " + cache.encoding +"\r\n\r\n";
+
+                System.out.println("\nRESPONSE HEADER FROM PROXY TO CLIENT:\n"
+                            + header
+                            + "\nEND OF HEADER\n");
+
+                response = byteMergerAll(header.getBytes(), response);
+                return response;
+            }
+
+        }catch(Exception e){
+            e.printStackTrace();
+        }
+        return null;
+    }
 
     //Sends request to original server and returns response as {header, body}
     public static byte[] SendRequest(String method, String destAddress, String data){
@@ -198,8 +263,9 @@ public class Main {
             */
 
             byte[] resHeaderBytes = resMsg_split[0].getBytes();
-            /* Subtract the head length from the original message.*/
-            byte[] resContentBytes = Arrays.copyOfRange(resMsgBytes, resHeaderBytes.length, resMsgBytes.length);
+            /* Subtract the head length from the original message.
+            resHeaderBytes.length+4 because we count the "\r\n\r\n" following the header.*/
+            byte[] resContentBytes = Arrays.copyOfRange(resMsgBytes, resHeaderBytes.length+4, resMsgBytes.length);
             
             /*** Method 2 ***///Wrong
             // String line;
@@ -215,9 +281,11 @@ public class Main {
                             + resHeader
                             + "\nEND OF HEADER\n");
             
-            String[] parsedHeader = ParseResponseHeader(resHeader); //return {code, respCode, length, conType}
+            String[] parsedHeader = ParseResponseHeader(resHeader); //return {code, respCode, length, conType, encoding}
             String code = parsedHeader[0]; 
             String respCode = parsedHeader[1];
+            String conType = parsedHeader[3];
+            String encoding = parsedHeader[4];
 
             // System.out.println(code+" ***"+code.equals(HTTP_RESP_NOT_FOUND));
             if(code.equals(HTTP_RESP_NOT_FOUND)){
@@ -225,11 +293,20 @@ public class Main {
                 resContentBytes = resContent.getBytes();
                 //return
             }else if (code.equals(HTTP_RESP_OK)) {
-                if (filename.length>0) {
-                    File cacheFile = OpenCacheFile(filename); //Write into cache.
+                if (filename.length()>0) {
+                    File cacheFile = OpenCacheFile(filename); //open file.
+                    FileOutputStream fos = new FileOutputStream(cacheFile);
+                    System.out.println("[WRITE FILE INTO CACHE]: " +  cacheFile.getPath());
+                    fos.write(resContentBytes);
+                    fos.flush();
+                    fos.close();
+
+                    Cache cache = new Cache(conType, cacheFile.getPath(), encoding);//(String add, String conType, String path, String encoding)
+                    cacheMap.put(destAddress,cache);
                 }
                 
             }else{//POST
+                //DO Nothing
                 //return
             }
 
@@ -237,6 +314,7 @@ public class Main {
                             + respCode
                             + "\nEND OF HEADER\n");
 
+            respCode += "\r\n\r\n"; //add "\r\n\r\n" back.
             byte[] respCodeBytes = respCode.getBytes(); //respCode
             byte[] mergeBytes = byteMergerAll(respCodeBytes, resContentBytes);
 
@@ -251,7 +329,7 @@ public class Main {
 
     }
 
-    /* Should using thread */
+    /* Should use thread here. */
     public static void ProcessRequest(Socket clientSocket, OutputStream out, BufferedReader in, String request){
         try{
             //Create a new socket for connecting to destination server
@@ -260,24 +338,30 @@ public class Main {
             String[] headerList= ParseRequest(header); //return {method,destAddress,httpVersion}
             String[] result = null;
             String response = "";
-            byte[] responseBytes=null;
+            byte[] responseBytes = null;
             // Socket socket2 = new Socket("localhost", 80);
             // OutputStream outgoingOS = socket2.getOutputStream();
             // outgoingOS.write(data, 0, len);
             if (headerList[0].equals("GET")) {
                 //Create a new socket for connecting to destination server
                 //is in cache?
-                // if(isInChash(destAddress)){
+                Cache cache = FindInChash(headerList[1]);
+                if(cache != null){
+                    responseBytes = ComposeFromCache(cache);
+                    // System.out.println("\n[LOOK UP THE CACHE]: FOUND IN THE CACHE: FILE = "+cache.path);
 
-                // }else{}
-                    System.out.println("\n[LOOK UP IN THE CACHE]: NOT FOUND, BUILD REQUEST TO SEND TO ORIGINAL SERVER");
+                }else{
+                    System.out.println("\n[LOOK UP THE CACHE]: NOT FOUND, BUILD REQUEST TO SEND TO ORIGINAL SERVER");
                     // result = SendRequest(headerList[0], headerList[1], request); //{method,destAddress,data} return byte[]
                     responseBytes = SendRequest(headerList[0], headerList[1], request);
                     if(responseBytes == null)
                         return;
+                }
             }else{
                 System.out.println("*** Not GET ***");
-                return;
+                responseBytes = SendRequest(headerList[0], headerList[1], request);
+                if(responseBytes == null)
+                    return;
                 //TODO
                 // SendRequest(headerList[0], headerList[1], request);
             }
@@ -291,7 +375,7 @@ public class Main {
         }
     }
 
-    public static void listening() throws Exception{
+    public static void Listening() throws Exception{
         ServerSocket serverSocket = null;
         try{
             serverSocket = new ServerSocket(PORT);
@@ -331,6 +415,6 @@ public class Main {
         // serverSocket.close();        
     }
     public static void main(String[] args) throws Exception {
-        listening();
+        Listening();
     }
 }
