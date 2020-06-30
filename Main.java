@@ -50,9 +50,16 @@ public class Main {
 
     public static String[] parseRemoteDestAddress(String destAddress){
         String[] destAddress_split = destAddress.split("//|/");
-        String hostname = destAddress_split[1];
+        String hostname = "";
         String url = "";
         String filename = destAddress_split[destAddress_split.length-1];
+        if (destAddress_split.length==1) {
+            hostname = destAddress_split[0];
+        }else{
+            hostname = destAddress_split[1];
+
+        }
+
         for(int i=2; i<destAddress_split.length-1;i++){
             url = url+destAddress_split[i]+"/";
         }
@@ -238,6 +245,7 @@ public class Main {
                 we received one packet, but there may be multiple packet need to transmit. 
                 */
                 // System.out.println("*****The len ="+len);
+
                 // if (len<MAX_MESSAGE_LEN) {
                 //     break;
                 // }
@@ -361,7 +369,7 @@ public class Main {
                 System.out.println("*** Not GET ***");
                 responseBytes = SendRequest(headerList[0], headerList[1], request);
                 if(responseBytes == null)
-                    return;
+                    responseBytes = (new String(" ")).getBytes();
                 //TODO
                 // SendRequest(headerList[0], headerList[1], request);
             }
